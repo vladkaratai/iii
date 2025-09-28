@@ -2,88 +2,87 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>C - Twilio Client</title>
-  <!-- Убраны пробелы -->
-<script src="https://sdk.twilio.com/js/client/v1.15/twilio.min.js"></script>
+  <title>C - Twilio Voice (v2)</title>
+  <!-- НОВЫЙ SDK -->
+  <script src="https://sdk.twilio.com/js/voice/releases/2.4.0/twilio.min.js"></script>
 </head>
 <body>
-  <h2>📞 C — Готов принимать звонки</h2>
+  <h2>📞 C — Готов принимать звонки (Voice SDK v2)</h2>
   <button id="init">✅ Активировать C (нажми сначала)</button>
   <button id="answer" disabled>📞 Поднять трубку</button>
   <button id="reject" disabled>❌ Сбросить</button>
 
   <script>
-  let device = null;
-  let pendingConn = null;
+    let device = null;
+    let pendingCall = null;
 
-  async function initDevice() {
-    try {
-      // 1) Запрос прав на микрофон (в user gesture)
-      await navigator.mediaDevices.getUserMedia({ audio: true }).catch(err => {
-        console.warn('getUserMedia warning:', err);
-        // не бросаем — но сообщаем пользователю, что микрофон может понадобиться
-      });
+    async function initDevice() {
+      try {
+        // Запрашиваем микрофон (обязательно в user gesture)
+        await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      const res = await fetch('https://burndial-twilio-cron.onrender.com/token-c?creator_id=C');
-      const data = await res.json();
+        // Получаем токен
+        const res = await fetch('https://burndial-twilio-cron.onrender.com/token-c?creator_id=C');
+        if (!res.ok) throw new Error(`Token fetch failed: ${res.status}`);
+        const data = await res.json();
+        const token = data.token?.trim();
+        if (!token) throw new Error('Token is missing or empty');
 
-      const token = data.token || data; // если возвращается просто строка или {token:...}
+        // Создаём устройство
+        device = new Twilio.Device(token, {
+          codecPreferences: ['opus', 'pcmu'],
+          logLevel: 'debug',
+          // Для продакшена: отключи debug
+        });
 
-      if (!token) throw new Error('Токен не получен');
+        // События
+        device.on('registered', () => {
+          console.log('✅ Device registered (ready to receive calls)');
+          document.getElementById('answer').disabled = false;
+          document.getElementById('reject').disabled = false;
+        });
 
-      // debug:true полезно при отладке
-      device = new Twilio.Device(token, { debug: true, codecPreferences: ['opus', 'pcmu'] });
+        device.on('error', error => {
+          console.error('❌ Device error:', error);
+          alert('Device error: ' + error.message);
+        });
 
-      device.on('ready', () => {
-        console.log('✅ Twilio.Device ready/registered');
-        document.getElementById('answer').disabled = false;
-        document.getElementById('reject').disabled = false;
-      });
+        device.on('incoming', call => {
+          console.log('📞 Incoming call:', call);
+          pendingCall = call;
 
-      device.on('offline', () => console.log('⚠️ Device offline'));
-      device.on('error', err => console.error('❌ Client error:', err));
-      device.on('connect', conn => console.log('🔗 Connected (device.connect) —', conn));
-      device.on('disconnect', conn => console.log('⛔ Disconnected', conn));
+          // Привязываем обработчики к кнопкам
+          document.getElementById('answer').onclick = () => {
+            console.log('✅ Accepting call...');
+            call.accept();
+          };
 
-      device.on('incoming', conn => {
-        console.log('📞 incoming connection:', conn);
-        pendingConn = conn;
+          document.getElementById('reject').onclick = () => {
+            console.log('❌ Rejecting call');
+            call.reject();
+          };
 
-        // логировать параметры соединения
-        try { console.log('incoming parameters:', conn.parameters); } catch (e) {}
+          // События звонка
+          call.on('accept', () => console.log('✅ Call accepted'));
+          call.on('disconnect', () => {
+            console.log('📞 Call disconnected');
+            pendingCall = null;
+          });
+          call.on('error', error => console.error('📞 Call error:', error));
+        });
 
-        document.getElementById('answer').onclick = async () => {
-          try {
-            console.log('✅ Accepting incoming call...');
-            conn.accept(); // user gesture
-          } catch (e) { console.error('accept error', e); }
-        };
+        // РЕГИСТРИРУЕМ устройство вручную (обязательно в v2!)
+        await device.register();
 
-        document.getElementById('reject').onclick = () => {
-          console.log('❌ Rejecting incoming call');
-          conn.reject();
-        };
-
-        // отслеживаем статусы внутри соединения
-        conn.on('accept', () => console.log('connection accepted (event)'));
-        conn.on('cancel', () => console.log('connection cancelled'));
-        conn.on('disconnect', () => console.log('connection disconnected'));
-        conn.on('error', e => console.error('connection error', e));
-      });
-
-      // регистрация (в старых версиях может быть нужна)
-      // try { device.register(); } catch (e) { console.warn('device.register() warning:', e); }
-
-      document.getElementById('init').disabled = true;
-      document.getElementById('init').textContent = '✅ Активирован';
-    } catch (err) {
-      console.error('❌ Ошибка инициализации:', err);
-      alert('Ошибка инициализации: ' + (err.message || err));
+        document.getElementById('init').disabled = true;
+        document.getElementById('init').textContent = '✅ Активирован';
+      } catch (err) {
+        console.error('❌ Initialization failed:', err);
+        alert('Ошибка: ' + (err.message || err));
+      }
     }
-  }
 
-  document.getElementById('init').onclick = initDevice;
-</script>
-
+    document.getElementById('init').onclick = initDevice;
+  </script>
 </body>
 </html>
