@@ -2,45 +2,57 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Document</title>
+  <title>C - Twilio Client</title>
+  <!-- Убраны пробелы -->
   <script src="https://sdk.twilio.com/js/client/v1.14/twilio.min.js"></script>
 </head>
 <body>
-    <h2>📞 C — Готов принимать звонки</h2>
-  <button id="answer">✅ Поднять трубку</button>
-  <button id="reject">❌ Сбросить звонок</button>
+  <h2>📞 C — Готов принимать звонки</h2>
+  <button id="init">✅ Активировать C (нажми сначала)</button>
+  <button id="answer" disabled>📞 Поднять трубку</button>
+  <button id="reject" disabled>❌ Сбросить</button>
+
   <script>
-    const CREATOR_ID = 'C';
-  
-    fetch(`https://burndial-twilio-cron.onrender.com/token-c?creator_id=C`)
-      .then(r => r.json())
-      .then(data => {
-        const device = new Twilio.Device(data.token);
-  
+    let device = null;
+
+    document.getElementById('init').onclick = async () => {
+      try {
+        const res = await fetch('https://burndial-twilio-cron.onrender.com/token-c?creator_id=C');
+        const data = await res.json();
+
+        if (!data.token) throw new Error('Токен не получен');
+
+        device = new Twilio.Device(data.token);
+
         device.on('register', () => {
           console.log('✅ Client зарегистрирован');
+          document.getElementById('answer').disabled = false;
+          document.getElementById('reject').disabled = false;
         });
-  
+
         device.on('error', err => {
-          console.error('❌ Ошибка Client:', err);
+          console.error('❌ Client error:', err.code, err.message);
         });
-  
+
         device.on('incoming', conn => {
-          console.log('📞 Звонок от A! Нажми "Ответить"');
+          console.log('📞 Входящий звонок!');
           document.getElementById('answer').onclick = () => {
-            console.log('✅ Поднял трубку');
+            console.log('✅ Принял звонок');
             conn.accept();
           };
           document.getElementById('reject').onclick = () => {
-            console.log('❌ Сбросил звонок');
+            console.log('❌ Отклонил звонок');
             conn.reject();
           };
         });
-  
+
         device.register();
-      })
-      .catch(err => console.error('❌ Ошибка загрузки токена:', err));
+        document.getElementById('init').disabled = true;
+        document.getElementById('init').textContent = '✅ Активирован';
+      } catch (err) {
+        console.error('❌ Ошибка инициализации:', err);
+      }
+    };
   </script>
 </body>
 </html>
