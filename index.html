@@ -13,46 +13,77 @@
   <button id="reject" disabled>❌ Сбросить</button>
 
   <script>
-    let device = null;
+  let device = null;
+  let pendingConn = null;
 
-    document.getElementById('init').onclick = async () => {
-      try {
-        const res = await fetch('https://burndial-twilio-cron.onrender.com/token-c?creator_id=C');
-        const data = await res.json();
+  async function initDevice() {
+    try {
+      // 1) Запрос прав на микрофон (в user gesture)
+      await navigator.mediaDevices.getUserMedia({ audio: true }).catch(err => {
+        console.warn('getUserMedia warning:', err);
+        // не бросаем — но сообщаем пользователю, что микрофон может понадобиться
+      });
 
-        if (!data.token) throw new Error('Токен не получен');
+      const res = await fetch('https://burndial-twilio-cron.onrender.com/token-c?creator_id=C');
+      const data = await res.json();
 
-        device = new Twilio.Device(data.token);
+      const token = data.token || data; // если возвращается просто строка или {token:...}
 
-        device.on('register', () => {
-          console.log('✅ Client зарегистрирован');
-          document.getElementById('answer').disabled = false;
-          document.getElementById('reject').disabled = false;
-        });
+      if (!token) throw new Error('Токен не получен');
 
-        device.on('error', err => {
-          console.error('❌ Client error:', err.code, err.message);
-        });
+      // debug:true полезно при отладке
+      device = new Twilio.Device(token, { debug: true, codecPreferences: ['opus', 'pcmu'] });
 
-        device.on('incoming', conn => {
-          console.log('📞 Входящий звонок!');
-          document.getElementById('answer').onclick = () => {
-            console.log('✅ Принял звонок');
-            conn.accept();
-          };
-          document.getElementById('reject').onclick = () => {
-            console.log('❌ Отклонил звонок');
-            conn.reject();
-          };
-        });
+      device.on('ready', () => {
+        console.log('✅ Twilio.Device ready/registered');
+        document.getElementById('answer').disabled = false;
+        document.getElementById('reject').disabled = false;
+      });
 
-        device.register();
-        document.getElementById('init').disabled = true;
-        document.getElementById('init').textContent = '✅ Активирован';
-      } catch (err) {
-        console.error('❌ Ошибка инициализации:', err);
-      }
-    };
-  </script>
+      device.on('offline', () => console.log('⚠️ Device offline'));
+      device.on('error', err => console.error('❌ Client error:', err));
+      device.on('connect', conn => console.log('🔗 Connected (device.connect) —', conn));
+      device.on('disconnect', conn => console.log('⛔ Disconnected', conn));
+
+      device.on('incoming', conn => {
+        console.log('📞 incoming connection:', conn);
+        pendingConn = conn;
+
+        // логировать параметры соединения
+        try { console.log('incoming parameters:', conn.parameters); } catch (e) {}
+
+        document.getElementById('answer').onclick = async () => {
+          try {
+            console.log('✅ Accepting incoming call...');
+            conn.accept(); // user gesture
+          } catch (e) { console.error('accept error', e); }
+        };
+
+        document.getElementById('reject').onclick = () => {
+          console.log('❌ Rejecting incoming call');
+          conn.reject();
+        };
+
+        // отслеживаем статусы внутри соединения
+        conn.on('accept', () => console.log('connection accepted (event)'));
+        conn.on('cancel', () => console.log('connection cancelled'));
+        conn.on('disconnect', () => console.log('connection disconnected'));
+        conn.on('error', e => console.error('connection error', e));
+      });
+
+      // регистрация (в старых версиях может быть нужна)
+      try { device.register(); } catch (e) { console.warn('device.register() warning:', e); }
+
+      document.getElementById('init').disabled = true;
+      document.getElementById('init').textContent = '✅ Активирован';
+    } catch (err) {
+      console.error('❌ Ошибка инициализации:', err);
+      alert('Ошибка инициализации: ' + (err.message || err));
+    }
+  }
+
+  document.getElementById('init').onclick = initDevice;
+</script>
+
 </body>
 </html>
