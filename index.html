@@ -29,11 +29,11 @@
         if (!token) throw new Error('Token is missing or empty');
 
         // Создаём устройство
-        device = new Twilio.Device(token, {
-          codecPreferences: ['opus', 'pcmu'],
-          logLevel: 'debug',
-          // Для продакшена: отключи debug
-        });
+      device = new TwilioVoice.Device(token, {
+  codecPreferences: ['opus', 'pcmu'],
+  logLevel: 'debug',
+});
+
 
         // События
         device.on('registered', () => {
