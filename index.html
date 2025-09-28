@@ -72,7 +72,7 @@
       });
 
       // регистрация (в старых версиях может быть нужна)
-      try { device.register(); } catch (e) { console.warn('device.register() warning:', e); }
+      // try { device.register(); } catch (e) { console.warn('device.register() warning:', e); }
 
       document.getElementById('init').disabled = true;
       document.getElementById('init').textContent = '✅ Активирован';
